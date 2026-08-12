@@ -16,6 +16,7 @@ body {
 }
 
 #game-container {
+    position: relative;
     /* Le da un ligero borde brillante estilo arcade */
     box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
 }
@@ -23,4 +24,73 @@ body {
 canvas {
     display: block;
     background-color: #000; /* El fondo del espacio profundo */
+}
+
+/* UI / HUD Styles */
+#ui-layer {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    font-size: 1.2rem;
+    z-index: 10;
+    text-shadow: 1px 1px 2px #000;
+}
+
+/* Screens Styles */
+.screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 20;
+    text-align: center;
+}
+
+.screen.active {
+    display: flex;
+}
+
+.screen h1 {
+    font-size: 3rem;
+    color: #00ff00;
+    margin-bottom: 20px;
+    text-shadow: 0 0 10px #00ff00;
+}
+
+.color-picker {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 30px;
+}
+
+.buttons {
+    display: flex;
+    gap: 20px;
+}
+
+button {
+    padding: 10px 20px;
+    font-size: 1.2rem;
+    font-family: inherit;
+    background: #222;
+    color: #fff;
+    border: 2px solid #00ff00;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+button:hover {
+    background: #00ff00;
+    color: #000;
 }

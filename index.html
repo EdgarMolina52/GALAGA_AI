@@ -3,17 +3,49 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Galaga Clone</title>
-    <!-- Ruta relativa con ./ para asegurar compatibilidad en GitHub Pages -->
+    <title>Galaga AI Multiplayer</title>
     <link rel="stylesheet" href="./styles.css">
+    <!-- Importar Socket.io desde el servidor -->
+    <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
     <div id="game-container">
+        <!-- HUD / UI del juego -->
+        <div id="ui-layer">
+            <div>Score: <span id="scoreVal">0</span></div>
+            <div>Level: <span id="levelVal">1</span></div>
+            <div>Lives: <span id="livesVal">3</span></div>
+        </div>
+
+        <!-- Pantallas (Screens) -->
+        <div id="start-screen" class="screen active">
+            <h1>Galaga AI</h1>
+            <div class="color-picker">
+                <label>Color Principal: <input type="color" id="color-primary" value="#ffffff"></label>
+                <label>Color Secundario: <input type="color" id="color-secondary" value="#ff0000"></label>
+            </div>
+            <div class="buttons">
+                <button id="btn-coop">Jugar Cooperativo</button>
+                <button id="btn-comp">Jugar Competitivo</button>
+            </div>
+        </div>
+
+        <div id="game-over-screen" class="screen">
+            <h1>Game Over</h1>
+            <p>Puntuación Final: <span id="finalScoreVal">0</span></p>
+            <button class="btn-restart">Volver al Inicio</button>
+        </div>
+
+        <div id="victory-screen" class="screen">
+            <h1>¡Victoria!</h1>
+            <p>Puntuación Final: <span id="victoryScoreVal">0</span></p>
+            <button class="btn-restart">Jugar de Nuevo</button>
+        </div>
+
         <!-- El lienzo donde dibujaremos todo el juego -->
         <canvas id="gameCanvas"></canvas>
     </div>
     
-    <!-- type="module" es vital para usar import/export en JS -->
     <script type="module" src="./src/main.js"></script>
 </body>
 </html>
