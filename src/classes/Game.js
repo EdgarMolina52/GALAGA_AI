@@ -15,25 +15,24 @@ export class Game {
         
         this.input = new InputHandler();
         
-        // Networking
-        this.socket = io();
-        this.players = {}; 
-        
         this.state = 'START'; 
         this.score = 0;
         this.level = 1;
         this.maxLevels = 6;
-        this.mode = 'coop';
         this.bossActive = false;
         
-        this.enemiesToKill = 0;
+        this.enemiesToSpawn = 0;
+        this.enemiesSpawned = 0;
         this.enemiesKilled = 0;
+        
+        this.spawnInterval = null;
         
         this.background = new Background();
         this.enemyProjectiles = [];
         this.enemies = [];
         this.particles = [];
         this.playerProjectiles = [];
+        this.player = null; // Local player
         
         this.scoreEl = document.getElementById('scoreVal');
         this.levelEl = document.getElementById('levelVal');
@@ -45,23 +44,12 @@ export class Game {
             victory: document.getElementById('victory-screen')
         };
         
-        this.sendColors = () => {
-            const primary = document.getElementById('color-primary') ? document.getElementById('color-primary').value : '#ffffff';
-            const secondary = document.getElementById('color-secondary') ? document.getElementById('color-secondary').value : '#ff0000';
-            if (this.socket) this.socket.emit('updateColors', { primary, secondary });
-        };
-        
-        document.getElementById('btn-coop').addEventListener('click', () => {
-            this.sendColors();
-            this.socket.emit('setMode', 'coop');
-            this.socket.emit('startGame');
-        });
-        
-        document.getElementById('btn-comp').addEventListener('click', () => {
-            this.sendColors();
-            this.socket.emit('setMode', 'comp');
-            this.socket.emit('startGame');
-        });
+        const btnPlay = document.getElementById('btn-play');
+        if (btnPlay) {
+            btnPlay.addEventListener('click', () => {
+                this.startGame();
+            });
+        }
         
         window.addEventListener('keydown', (e) => {
             if (e.code === 'Space' && (this.state === 'GAMEOVER' || this.state === 'VICTORY')) {
@@ -77,96 +65,10 @@ export class Game {
             });
         });
         
-        this.setupSocketListeners();
-        
         this.lastTime = 0;
         requestAnimationFrame((timeStamp) => this.gameLoop(timeStamp));
     }
     
-    setupSocketListeners() {
-        this.socket.on('init', (state) => {
-            this.mode = state.mode;
-            this.level = state.level;
-            
-            for (let id in state.players) {
-                this.players[id] = new Player(this, state.players[id].x, state.players[id].y, id === this.socket.id, state.players[id].colors);
-            }
-        });
-
-        this.socket.on('playerJoined', (data) => {
-            this.players[data.id] = new Player(this, data.player.x, data.player.y, false, data.player.colors);
-        });
-        
-        this.socket.on('playerColorsUpdated', (data) => {
-            if (this.players[data.id]) {
-                this.players[data.id].colors = data.colors;
-            }
-        });
-        
-        this.socket.on('playerLeft', (id) => {
-            delete this.players[id];
-        });
-        
-        this.socket.on('playerMoved', (data) => {
-            if (this.players[data.id]) {
-                this.players[data.id].x = data.x;
-                this.players[data.id].y = data.y;
-            }
-        });
-        
-        this.socket.on('playerShot', (data) => {
-            if (this.players[data.id]) {
-                this.players[data.id].remoteShoot(data.x, data.y);
-            }
-        });
-        
-        this.socket.on('modeChanged', (mode) => {
-            this.mode = mode;
-        });
-
-        this.socket.on('gameStarted', () => {
-            this.sendColors();
-            this.startGame();
-        });
-
-        this.socket.on('levelChanged', (lvl) => {
-            this.level = lvl;
-            this.startLevel();
-        });
-
-        this.socket.on('spawnEnemy', (data) => {
-            if (this.state === 'PLAYING' && !this.bossActive) {
-                this.enemies.push(new Enemy(this, data.x, data.y, data.type, data.level, data.id));
-            }
-        });
-        
-        this.socket.on('spawnBoss', () => {
-            if (this.state === 'PLAYING' && !this.bossActive) {
-                this.spawnBoss();
-            }
-        });
-        
-        this.socket.on('playerHit', (id) => {
-            let p = this.players[id];
-            if (p) {
-                this.createExplosion(p.x + p.width/2, p.y + p.height/2, p.color, 30);
-                p.lives--;
-                this.updateUI();
-                
-                if (p.lives <= 0) {
-                    p.markedForDeletion = true;
-                } else {
-                    p.x = CONFIG.GAME_WIDTH / 2 - CONFIG.PLAYER_WIDTH / 2;
-                    p.y = CONFIG.GAME_HEIGHT - CONFIG.PLAYER_HEIGHT - 20;
-                }
-            }
-        });
-
-        this.socket.on('gameOver', () => {
-            this.changeState('GAMEOVER');
-        });
-    }
-
     startGame() {
         this.changeState('PLAYING');
         this.score = 0;
@@ -175,22 +77,15 @@ export class Game {
         this.enemies = [];
         this.enemyProjectiles = [];
         this.playerProjectiles = [];
+        this.particles = [];
         
-        this.enemiesToKill = 10 + (this.level * 5);
-        this.enemiesKilled = 0;
+        const primary = document.getElementById('color-primary') ? document.getElementById('color-primary').value : '#ffffff';
+        const secondary = document.getElementById('color-secondary') ? document.getElementById('color-secondary').value : '#ff0000';
         
-        // Reset players and spread them out
-        let index = 0;
-        const totalPlayers = Object.keys(this.players).length;
-        const startX = (CONFIG.GAME_WIDTH / 2) - ((totalPlayers - 1) * 40);
+        this.player = new Player(this, CONFIG.GAME_WIDTH / 2 - CONFIG.PLAYER_WIDTH / 2, CONFIG.GAME_HEIGHT - CONFIG.PLAYER_HEIGHT - 20, true, { primary, secondary });
+        this.player.lives = 3;
         
-        for (let id in this.players) {
-            this.players[id].lives = 3;
-            this.players[id].x = startX + (index * 80);
-            index++;
-        }
-        
-        this.updateUI();
+        this.startLevel();
     }
     
     startLevel() {
@@ -199,10 +94,38 @@ export class Game {
         this.enemies = [];
         this.bossActive = false;
         
-        this.enemiesToKill = 10 + (this.level * 5);
+        this.enemiesToSpawn = 10 + (this.level * 5);
+        this.enemiesSpawned = 0;
         this.enemiesKilled = 0;
         
         this.updateUI();
+        this.startSpawning();
+    }
+
+    startSpawning() {
+        if (this.spawnInterval) clearInterval(this.spawnInterval);
+        
+        const spawnRate = Math.max(1000, 3000 - (this.level * 200));
+        
+        this.spawnInterval = setInterval(() => {
+            if (this.state !== 'PLAYING') {
+                clearInterval(this.spawnInterval);
+                return;
+            }
+
+            if (this.enemiesSpawned < this.enemiesToSpawn) {
+                const types = ['scout', 'fighter', 'tank'];
+                const type = types[Math.floor(Math.random() * Math.min(3, 1 + this.level * 0.5))];
+                
+                const x = Math.random() * (CONFIG.GAME_WIDTH - 40);
+                const y = -50;
+                
+                this.enemies.push(new Enemy(this, x, y, type, this.level, Math.random().toString()));
+                this.enemiesSpawned++;
+            } else {
+                clearInterval(this.spawnInterval);
+            }
+        }, spawnRate);
     }
 
     spawnBoss() {
@@ -212,19 +135,34 @@ export class Game {
     
     enemyKilled() {
         this.enemiesKilled++;
-        // Check if we reached the required kills to spawn boss
-        if (!this.bossActive && this.enemiesKilled >= this.enemiesToKill) {
-            // We tell server to stop spawning, but server also has count.
-            // Client side triggers boss when ready and no other enemies.
+        if (!this.bossActive && this.enemiesKilled >= this.enemiesToSpawn) {
+            this.spawnBoss();
+        }
+    }
+
+    bossKilled() {
+        if (this.state === 'PLAYING' && this.bossActive) {
+            this.level++;
+            this.bossActive = false;
+            
+            if (this.level > this.maxLevels) {
+                this.changeState('VICTORY');
+                return;
+            }
+            
+            setTimeout(() => {
+                if (this.state === 'PLAYING') {
+                    this.startLevel();
+                }
+            }, 3000);
         }
     }
 
     updateUI() {
         this.scoreEl.innerText = this.score;
         this.levelEl.innerText = this.level;
-        const localPlayer = this.players[this.socket.id];
-        if (localPlayer) {
-            this.livesEl.innerText = localPlayer.lives;
+        if (this.player) {
+            this.livesEl.innerText = this.player.lives;
         }
     }
 
@@ -246,37 +184,42 @@ export class Game {
                 let e = this.enemies[j];
                 if (p.collidesWith(e)) {
                     p.markedForDeletion = true;
-                    e.takeDamage(1);
+                    e.takeDamage(1); // Enemigo se encarga de llamar enemyKilled / bossKilled si muere
                     break;
                 }
             }
         }
         
-        const localPlayer = this.players[this.socket.id];
-        if (!localPlayer || localPlayer.markedForDeletion) return;
+        if (!this.player || this.player.markedForDeletion) return;
         
         for (let i = this.enemyProjectiles.length - 1; i >= 0; i--) {
             let p = this.enemyProjectiles[i];
-            if (p.collidesWith(localPlayer)) {
+            if (p.collidesWith(this.player)) {
                 p.markedForDeletion = true;
-                this.playerHit(localPlayer);
+                this.playerHit();
             }
         }
         
         for (let i = this.enemies.length - 1; i >= 0; i--) {
             let e = this.enemies[i];
-            if (e.collidesWith(localPlayer)) {
+            if (e.collidesWith(this.player)) {
                 e.takeDamage(100);
-                this.playerHit(localPlayer);
+                this.playerHit();
             }
         }
     }
     
-    playerHit(player) {
-        // Solo enviamos el evento si el que choca es nuestro jugador local
-        // El servidor lo validará y nos devolverá un evento 'playerHit' para actualizar la UI
-        if (player === this.players[this.socket.id]) {
-            this.socket.emit('playerHit');
+    playerHit() {
+        this.createExplosion(this.player.x + this.player.width/2, this.player.y + this.player.height/2, this.player.colors.primary, 30);
+        this.player.lives--;
+        this.updateUI();
+        
+        if (this.player.lives <= 0) {
+            this.player.markedForDeletion = true;
+            this.changeState('GAMEOVER');
+        } else {
+            this.player.x = CONFIG.GAME_WIDTH / 2 - CONFIG.PLAYER_WIDTH / 2;
+            this.player.y = CONFIG.GAME_HEIGHT - CONFIG.PLAYER_HEIGHT - 20;
         }
     }
 
@@ -285,16 +228,8 @@ export class Game {
         
         if (this.state !== 'PLAYING') return;
 
-        const localPlayer = this.players[this.socket.id];
-        if (localPlayer) {
-            const oldX = localPlayer.x;
-            const oldY = localPlayer.y;
-            
-            localPlayer.update(this.input);
-            
-            if (oldX !== localPlayer.x || oldY !== localPlayer.y) {
-                this.socket.emit('playerMove', { x: localPlayer.x, y: localPlayer.y });
-            }
+        if (this.player && !this.player.markedForDeletion) {
+            this.player.update(this.input);
         }
         
         this.playerProjectiles.forEach(p => p.update());
@@ -323,10 +258,8 @@ export class Game {
         this.enemyProjectiles.forEach(p => p.draw(this.ctx));
         this.enemies.forEach(e => e.draw(this.ctx));
         
-        for (let id in this.players) {
-            if (this.players[id].lives > 0) {
-                this.players[id].draw(this.ctx);
-            }
+        if (this.player && !this.player.markedForDeletion) {
+            this.player.draw(this.ctx);
         }
     }
 
@@ -339,9 +272,11 @@ export class Game {
         } else if (newState === 'GAMEOVER') {
             document.getElementById('finalScoreVal').innerText = this.score;
             this.screens.gameOver.classList.add('active');
+            if (this.spawnInterval) clearInterval(this.spawnInterval);
         } else if (newState === 'VICTORY') {
             document.getElementById('victoryScoreVal').innerText = this.score;
             this.screens.victory.classList.add('active');
+            if (this.spawnInterval) clearInterval(this.spawnInterval);
         }
     }
 
@@ -349,9 +284,6 @@ export class Game {
         const deltaTime = timeStamp - this.lastTime;
         this.lastTime = timeStamp;
 
-        // Quitamos la lógica local de volver al inicio con ENTER para evitar desync.
-        // El anfitrión o la recarga del navegador maneja el reinicio en juegos multijugador simples.
-        
         this.update();
         this.draw();
 

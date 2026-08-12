@@ -73,27 +73,16 @@ export class Enemy extends Entity {
         // CONDICIÓN DE GAME OVER POR FUGA
         if (this.y + this.height > CONFIG.GAME_HEIGHT) {
             this.markedForDeletion = true;
-            if (this.game.socket) {
-                this.game.socket.emit('gameOver');
-            }
             this.game.changeState('GAMEOVER');
         }
     }
     
     getClosestPlayer() {
-        let closest = null;
-        let minDist = Infinity;
-        for (let id in this.game.players) {
-            let p = this.game.players[id];
-            if (!p.markedForDeletion) {
-                let dist = Math.hypot(p.x - this.x, p.y - this.y);
-                if (dist < minDist) {
-                    minDist = dist;
-                    closest = p;
-                }
-            }
+        let p = this.game.player;
+        if (p && !p.markedForDeletion) {
+            return p;
         }
-        return closest;
+        return null;
     }
 
     shoot() {
@@ -126,9 +115,9 @@ export class Enemy extends Entity {
             this.game.createExplosion(this.x + this.width/2, this.y + this.height/2, this.color, 15);
             
             if (this.constructor.name === 'Boss') {
-                if (this.game.socket) this.game.socket.emit('bossKilled');
+                this.game.bossKilled();
             } else {
-                if (this.game.socket) this.game.socket.emit('enemyKilled', this.id);
+                this.game.enemyKilled();
             }
         }
     }

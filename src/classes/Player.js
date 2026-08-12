@@ -109,15 +109,6 @@ export class Player extends Entity {
     shoot() {
         const xPos = this.x + this.width / 2 - CONFIG.PROJECTILE_WIDTH / 2;
         this.game.playerProjectiles.push(new Projectile(xPos, this.y));
-        
-        // Emitir al servidor
-        if (this.game.socket) {
-            this.game.socket.emit('playerShoot', { x: xPos, y: this.y });
-        }
-    }
-    
-    remoteShoot(x, y) {
-        this.game.playerProjectiles.push(new Projectile(x, y));
     }
 
     draw(ctx) {
