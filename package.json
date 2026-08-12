@@ -1,0 +1,15 @@
+{
+  "name": "galaga-ai",
+  "version": "1.0.0",
+  "description": "Galaga clone with HTML5 Canvas",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
