@@ -37,6 +37,41 @@ export class InputHandler {
 
     // Acción principal (Disparar / Iniciar juego)
     get action() {
-        return this.isDown('Space') || this.isDown('Enter');
+        return this.isDown('Space') || this.isDown('Enter') || this.isShooting;
+    }
+
+    initTouch(canvas) {
+        this.touchX = null;
+        this.touchY = null;
+        this.isTouching = false;
+        this.isShooting = false;
+
+        if (!canvas) return;
+
+        const updateTouch = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            this.touchX = (e.touches[0].clientX - rect.left) * scaleX;
+            this.touchY = (e.touches[0].clientY - rect.top) * scaleY;
+        };
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault(); // Evita scroll o zoom
+            updateTouch(e);
+            this.isTouching = true;
+            this.isShooting = true;
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            updateTouch(e);
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            this.isTouching = false;
+            this.isShooting = false;
+        }, { passive: false });
     }
 }

@@ -14,6 +14,7 @@ export class Game {
         this.canvas.height = CONFIG.GAME_HEIGHT;
         
         this.input = new InputHandler();
+        this.input.initTouch(this.canvas);
         
         this.state = 'START'; 
         this.score = 0;
