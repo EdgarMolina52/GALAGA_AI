@@ -52,6 +52,7 @@ export class Game {
             const secondary = document.getElementById('color-secondary') ? document.getElementById('color-secondary').value : '#ff0000';
             if (this.socket && this.players[this.socket.id]) {
                 this.players[this.socket.id].colors = { primary, secondary };
+                this.players[this.socket.id].prerender();
             }
             if (this.socket) this.socket.emit('updateColors', { primary, secondary });
         };
@@ -117,6 +118,7 @@ export class Game {
         this.socket.on('playerColorsUpdated', (data) => {
             if (this.players[data.id]) {
                 this.players[data.id].colors = data.colors;
+                this.players[data.id].prerender();
             }
         });
         

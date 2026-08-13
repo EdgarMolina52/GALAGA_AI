@@ -78,6 +78,7 @@ export class Player extends Entity {
     }
 
     update(input) {
+        if (this.lives <= 0) return; // Un jugador muerto no puede moverse ni disparar
         if (this.invulnerableTimer > 0) this.invulnerableTimer--;
         
         // Solo el jugador local actualiza su propia posición usando el input
