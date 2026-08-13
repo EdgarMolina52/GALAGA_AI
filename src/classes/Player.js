@@ -88,6 +88,17 @@ export class Player extends Entity {
             this.speedY = 0;
         }
 
+        if (input.isTouching && input.touchX !== null && input.touchY !== null) {
+            // El jugador sigue al dedo instantáneamente para mejor control táctil
+            // Añadimos un offset de 80 píxeles arriba para que el dedo no tape la nave
+            this.x = input.touchX - this.width / 2;
+            this.y = input.touchY - this.height / 2 - 80;
+            
+            // Para el modo multijugador, necesitamos simular que hay speed para enviar los datos de forma fluida
+            this.speedX = 0;
+            this.speedY = 0;
+        }
+
         this.x += this.speedX;
         this.y += this.speedY;
 
