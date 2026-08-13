@@ -50,6 +50,9 @@ export class Game {
         this.sendColors = () => {
             const primary = document.getElementById('color-primary') ? document.getElementById('color-primary').value : '#ffffff';
             const secondary = document.getElementById('color-secondary') ? document.getElementById('color-secondary').value : '#ff0000';
+            if (this.socket && this.players[this.socket.id]) {
+                this.players[this.socket.id].colors = { primary, secondary };
+            }
             if (this.socket) this.socket.emit('updateColors', { primary, secondary });
         };
         
@@ -158,9 +161,10 @@ export class Game {
         
         this.socket.on('gameOver', () => {
             if (this.state !== 'GAMEOVER') {
+                audioManager.playGameOver();
                 this.changeState('GAMEOVER');
                 const localPlayer = this.players[this.socket.id];
-                this.socket.emit('submitScore', { name: localPlayer ? localPlayer.name : 'Unknown', score: this.score });
+                this.socket.emit('submitScore', { name: this.playerName || (localPlayer ? localPlayer.name : 'Unknown'), score: this.score });
             }
         });
         
@@ -251,13 +255,6 @@ export class Game {
                     }
                 }
             }
-        });
-
-        this.socket.on('gameOver', () => {
-            audioManager.playGameOver();
-            this.changeState('GAMEOVER');
-            const localPlayer = this.players[this.socket.id];
-            this.socket.emit('submitScore', { name: this.playerName || (localPlayer ? localPlayer.name : 'Unknown'), score: this.score });
         });
 
         this.socket.on('spawnPowerUp', (data) => {
