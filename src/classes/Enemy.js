@@ -73,13 +73,10 @@ export class Enemy extends Entity {
             }
         }
 
-        // CONDICIÓN DE GAME OVER POR FUGA
+        // Si el enemigo sale de la pantalla, simplemente desaparece sin causar Game Over
         if (this.y + this.height > CONFIG.GAME_HEIGHT) {
             this.markedForDeletion = true;
-            if (this.game.socket) {
-                this.game.socket.emit('gameOver');
-            }
-            this.game.changeState('GAMEOVER');
+            // Quitamos el Game Over automático para evitar problemas de desincronización
         }
     }
     

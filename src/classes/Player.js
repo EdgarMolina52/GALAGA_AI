@@ -34,10 +34,13 @@ export class Player extends Entity {
     }
     
     prerender() {
-        this.canvas = document.createElement('canvas');
-        this.canvas.width = this.width;
-        this.canvas.height = this.height;
-        const ctx = this.canvas.getContext('2d');
+        const padding = 15;
+        this.padding = padding;
+        
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = this.width;
+        tempCanvas.height = this.height;
+        const tempCtx = tempCanvas.getContext('2d');
         
         const grid = [
             "......BBB......",
@@ -70,11 +73,20 @@ export class Player extends Entity {
             for (let c = 0; c < grid[r].length; c++) {
                 let char = grid[r][c];
                 if (colMap[char]) {
-                    ctx.fillStyle = colMap[char];
-                    ctx.fillRect(c * pxW, r * pxH, pxW, pxH);
+                    tempCtx.fillStyle = colMap[char];
+                    tempCtx.fillRect(c * pxW, r * pxH, pxW, pxH);
                 }
             }
         }
+        
+        this.canvas = document.createElement('canvas');
+        this.canvas.width = this.width + padding * 2;
+        this.canvas.height = this.height + padding * 2;
+        const ctx = this.canvas.getContext('2d');
+        
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = this.colors.primary;
+        ctx.drawImage(tempCanvas, padding, padding);
     }
 
     update(input) {
@@ -215,10 +227,7 @@ export class Player extends Entity {
             return; // Skip drawing to create blink effect
         }
         
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = this.colors.primary;
-        ctx.drawImage(this.canvas, this.x, this.y);
-        ctx.shadowBlur = 0;
+        ctx.drawImage(this.canvas, this.x - this.padding, this.y - this.padding);
         
         if (this.shieldActive) {
             ctx.beginPath();
