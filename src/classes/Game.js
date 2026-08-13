@@ -101,7 +101,7 @@ export class Game {
                 this.players[id].name = state.players[id].name;
             }
 
-            if (state.isPlaying) {
+            if (state.isPlaying && this.playerName) {
                 this.changeState('PLAYING');
             }
         });
@@ -180,8 +180,11 @@ export class Game {
         });
 
         this.socket.on('gameStarted', () => {
-            this.sendColors();
-            this.startGame();
+            if (this.playerName) {
+                this.sendColors();
+                this.startGame();
+                audioManager.playBackgroundMusic();
+            }
         });
 
         this.socket.on('levelChanged', (lvl) => {
@@ -254,7 +257,7 @@ export class Game {
             audioManager.playGameOver();
             this.changeState('GAMEOVER');
             const localPlayer = this.players[this.socket.id];
-            this.socket.emit('submitScore', { name: localPlayer ? localPlayer.name : 'Unknown', score: this.score });
+            this.socket.emit('submitScore', { name: this.playerName || (localPlayer ? localPlayer.name : 'Unknown'), score: this.score });
         });
 
         this.socket.on('spawnPowerUp', (data) => {
