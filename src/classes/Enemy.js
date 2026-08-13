@@ -1,6 +1,7 @@
 import { Entity } from './Entity.js';
 import { Projectile } from './Projectile.js';
 import { CONFIG } from '../utils/config.js';
+import { audioManager } from '../utils/audio.js';
 
 export class Enemy extends Entity {
     constructor(game, x, y, type = 'fighter', levelMultiplier = 1, id) {
@@ -64,9 +65,9 @@ export class Enemy extends Entity {
         if (this.shootTimer <= 0) {
             this.shoot();
             if (this.type === 'tank') {
-                this.shootTimer = Math.random() * 60 + 30; 
+                this.shootTimer = (Math.random() * 60 + 30) / Math.max(1, this.levelMultiplier * 0.8); 
             } else {
-                this.shootTimer = Math.random() * 120 + 80;
+                this.shootTimer = (Math.random() * 120 + 80) / Math.max(1, this.levelMultiplier * 0.8);
             }
         }
 
@@ -99,6 +100,7 @@ export class Enemy extends Entity {
     shoot() {
         if (this.type === 'scout') return; // Los scouts no disparan, se abalanzan
         
+        audioManager.playEnemyShoot();
         const xPos = this.x + this.width / 2 - CONFIG.PROJECTILE_WIDTH / 2;
         let pSpeedX = 0;
         let pSpeedY = CONFIG.ENEMY_PROJECTILE_SPEED;
@@ -126,9 +128,9 @@ export class Enemy extends Entity {
             this.game.createExplosion(this.x + this.width/2, this.y + this.height/2, this.color, 15);
             
             if (this.constructor.name === 'Boss') {
-                if (this.game.socket) this.game.socket.emit('bossKilled');
+                if (this.game.socket) this.game.socket.emit('bossKilled', { x: this.x, y: this.y });
             } else {
-                if (this.game.socket) this.game.socket.emit('enemyKilled', this.id);
+                if (this.game.socket) this.game.socket.emit('enemyKilled', { id: this.id, x: this.x, y: this.y });
             }
         }
     }

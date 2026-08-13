@@ -64,6 +64,8 @@ io.on('connection', (socket) => {
     socket.emit('init', stateToSend);
     socket.broadcast.emit('playerJoined', { id: socket.id, player: gameState.players[socket.id] });
     
+    if (gameState.isPlaying) updateEnemiesToSpawn();
+    
     socket.on('updateColors', (colors) => {
         if (gameState.players[socket.id]) {
             gameState.players[socket.id].colors = colors;
@@ -108,22 +110,53 @@ io.on('connection', (socket) => {
         io.emit('modeChanged', mode);
     });
     
-    socket.on('enemyKilled', (enemyId) => {
+    function updateEnemiesToSpawn() {
+        const playerCount = Math.max(1, Object.keys(gameState.players).length);
+        gameState.enemiesToSpawn = (10 + (gameState.level * 5)) * playerCount;
+    }
+    
+    socket.on('setName', (name) => {
+        if (gameState.players[socket.id]) {
+            gameState.players[socket.id].name = name;
+        }
+    });
+
+    socket.on('enemyKilled', (data) => {
+        const enemyId = data.id;
         if (gameState.isPlaying && !gameState.killedEnemiesSet.has(enemyId)) {
             gameState.killedEnemiesSet.add(enemyId);
+            
+            // Avisar a los demás clientes que el enemigo murió
+            socket.broadcast.emit('enemyKilled', enemyId);
+            
+            // 15% chance to drop power-up
+            if (Math.random() < 0.15) {
+                const types = ['revive', 'triple_shot', 'shield'];
+                const puType = types[Math.floor(Math.random() * types.length)];
+                io.emit('spawnPowerUp', { id: Math.random().toString(36).substr(2, 9), type: puType, x: data.x, y: data.y });
+            }
+
             // Si ya mataron a todos, spawn boss
             if (gameState.killedEnemiesSet.size >= gameState.enemiesToSpawn && !gameState.bossSpawned) {
                 gameState.bossSpawned = true;
                 if (spawnInterval) clearInterval(spawnInterval);
-                io.emit('spawnBoss');
+                
+                const bossTypes = ['laser', 'split', 'spawner'];
+                const bossType = bossTypes[Math.floor(Math.random() * bossTypes.length)];
+                
+                io.emit('spawnBoss', { type: bossType });
             }
         }
     });
-    
-    socket.on('bossKilled', () => {
+
+    socket.on('bossKilled', (data) => {
         if (gameState.isPlaying && gameState.bossSpawned) {
+            // Boss always drops a revive power up
+            if (data && data.x !== undefined) {
+                io.emit('spawnPowerUp', { id: Math.random().toString(36).substr(2, 9), type: 'revive', x: data.x, y: data.y });
+            }
             gameState.level++;
-            gameState.enemiesToSpawn = 10 + (gameState.level * 5);
+            updateEnemiesToSpawn();
             
             // Damos un respiro antes de empezar el siguiente nivel
             setTimeout(() => {
@@ -139,7 +172,7 @@ io.on('connection', (socket) => {
             gameState.isPlaying = true;
             gameState.level = 1;
             gameState.score = 0;
-            gameState.enemiesToSpawn = 10 + (gameState.level * 5);
+            updateEnemiesToSpawn();
             gameState.killedEnemiesSet.clear();
             gameState.bossSpawned = false;
             
@@ -153,9 +186,34 @@ io.on('connection', (socket) => {
         }
     });
     
+    socket.on('usePowerUp', (data) => {
+        // data.type
+        if (data.type === 'revive') {
+            io.emit('showReviveMenu', socket.id);
+            if (spawnInterval) clearInterval(spawnInterval); // Pausa el spawn
+        } else {
+            // Shield or triple_shot is handled client-side mostly, but we could broadcast it
+            socket.broadcast.emit('playerPowerUp', { id: socket.id, type: data.type });
+        }
+    });
+
+    socket.on('revivePlayer', (playerIdToRevive) => {
+        if (gameState.players[playerIdToRevive]) {
+            gameState.players[playerIdToRevive].lives = 3;
+            io.emit('playerRevived', playerIdToRevive);
+        }
+        io.emit('resumeGame');
+        if (gameState.isPlaying) startSpawning();
+    });
+
+    socket.on('cancelRevive', () => {
+        io.emit('resumeGame');
+        if (gameState.isPlaying) startSpawning();
+    });
+
     socket.on('nextLevel', () => {
         gameState.level++;
-        gameState.enemiesToSpawn = 10 + (gameState.level * 5);
+        updateEnemiesToSpawn();
         startSpawning();
         io.emit('levelChanged', gameState.level);
     });
@@ -163,11 +221,33 @@ io.on('connection', (socket) => {
     socket.on('gameOver', () => {
         gameState.isPlaying = false;
         if (spawnInterval) clearInterval(spawnInterval);
+        io.emit('gameOver');
+    });
+
+    socket.on('powerUpCollected', (puId) => {
+        socket.broadcast.emit('powerUpCollected', puId);
+    });
+    
+    socket.on('dropPowerUps', (data) => {
+        if (data && data.types && Array.isArray(data.types)) {
+            data.types.forEach((type, index) => {
+                const offsetX = (Math.random() - 0.5) * 60;
+                const offsetY = (Math.random() - 0.5) * 60;
+                io.emit('spawnPowerUp', { 
+                    id: Math.random().toString(36).substr(2, 9), 
+                    type: type, 
+                    x: data.x + offsetX, 
+                    y: data.y + offsetY 
+                });
+            });
+        }
     });
 
     socket.on('disconnect', () => {
         delete gameState.players[socket.id];
         io.emit('playerLeft', socket.id);
+        if (gameState.isPlaying) updateEnemiesToSpawn();
+        
         if (Object.keys(gameState.players).length === 0) {
             gameState.isPlaying = false;
             if (spawnInterval) clearInterval(spawnInterval);

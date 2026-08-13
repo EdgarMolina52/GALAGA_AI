@@ -1,6 +1,7 @@
 import { Entity } from './Entity.js';
 import { Projectile } from './Projectile.js';
 import { CONFIG } from '../utils/config.js';
+import { audioManager } from '../utils/audio.js';
 
 export class Player extends Entity {
     constructor(game, x = CONFIG.GAME_WIDTH / 2 - CONFIG.PLAYER_WIDTH / 2, y = CONFIG.GAME_HEIGHT - CONFIG.PLAYER_HEIGHT - 20, isLocal = true, colors = { primary: '#ffffff', secondary: '#ff0000' }) {
@@ -20,6 +21,14 @@ export class Player extends Entity {
         
         this.fireTimer = 0;
         this.shootCooldown = 15;
+        
+        this.powerUpInventory = {
+            shield: 0,
+            triple_shot: 0,
+            revive: 0
+        };
+        
+        this.invulnerableTimer = 120; // 2 seconds of invulnerability on spawn
         
         this.prerender();
     }
@@ -69,6 +78,8 @@ export class Player extends Entity {
     }
 
     update(input) {
+        if (this.invulnerableTimer > 0) this.invulnerableTimer--;
+        
         // Solo el jugador local actualiza su propia posición usando el input
         if (!this.isLocal) return;
 
@@ -118,23 +129,97 @@ export class Player extends Entity {
     }
 
     shoot() {
+        audioManager.playShoot();
         const xPos = this.x + this.width / 2 - CONFIG.PROJECTILE_WIDTH / 2;
-        this.game.playerProjectiles.push(new Projectile(xPos, this.y));
         
-        // Emitir al servidor
-        if (this.game.socket) {
-            this.game.socket.emit('playerShoot', { x: xPos, y: this.y });
+        if (this.tripleShotActive) {
+            this.game.playerProjectiles.push(new Projectile(xPos, this.y));
+            
+            const leftProj = new Projectile(this.x, this.y);
+            leftProj.speedX = -1;
+            this.game.playerProjectiles.push(leftProj);
+            
+            const rightProj = new Projectile(this.x + this.width, this.y);
+            rightProj.speedX = 1;
+            this.game.playerProjectiles.push(rightProj);
+            
+            if (this.game.socket) {
+                this.game.socket.emit('playerShoot', { x: xPos, y: this.y, triple: true });
+            }
+        } else {
+            this.game.playerProjectiles.push(new Projectile(xPos, this.y));
+            
+            // Emitir al servidor
+            if (this.game.socket) {
+                this.game.socket.emit('playerShoot', { x: xPos, y: this.y });
+            }
         }
     }
     
-    remoteShoot(x, y) {
-        this.game.playerProjectiles.push(new Projectile(x, y));
+    remoteShoot(x, y, triple = false) {
+        if (triple) {
+            this.game.playerProjectiles.push(new Projectile(x, y));
+            const leftProj = new Projectile(x - this.width/2, y);
+            leftProj.speedX = -1;
+            this.game.playerProjectiles.push(leftProj);
+            
+            const rightProj = new Projectile(x + this.width/2, y);
+            rightProj.speedX = 1;
+            this.game.playerProjectiles.push(rightProj);
+        } else {
+            this.game.playerProjectiles.push(new Projectile(x, y));
+        }
+    }
+
+    holdPowerUp(type) {
+        if (!this.isLocal) return; // Only local player holds it
+        if (this.powerUpInventory[type] !== undefined) {
+            this.powerUpInventory[type]++;
+        }
+        // Update UI is handled by Game.js in updateUI()
+    }
+    
+    usePowerUp(type) {
+        if (!this.isLocal || this.powerUpInventory[type] <= 0) return;
+        
+        this.powerUpInventory[type]--;
+        
+        if (this.game.socket) {
+            this.game.socket.emit('usePowerUp', { type });
+        }
+        
+        this.activatePowerUp(type);
+    }
+    
+    activatePowerUp(type) {
+        if (type === 'shield') {
+            this.shieldActive = true;
+            setTimeout(() => { this.shieldActive = false; }, 5000); // 5 seconds
+        } else if (type === 'triple_shot') {
+            this.tripleShotActive = true;
+            setTimeout(() => { this.tripleShotActive = false; }, 5000); // 5 seconds
+        }
     }
 
     draw(ctx) {
+        if (!this.canvas) return;
+        
+        // Blink effect if invulnerable
+        if (this.invulnerableTimer > 0 && Math.floor(Date.now() / 100) % 2 === 0) {
+            return; // Skip drawing to create blink effect
+        }
+        
         ctx.shadowBlur = 10;
         ctx.shadowColor = this.colors.primary;
         ctx.drawImage(this.canvas, this.x, this.y);
         ctx.shadowBlur = 0;
+        
+        if (this.shieldActive) {
+            ctx.beginPath();
+            ctx.arc(this.x + this.width/2, this.y + this.height/2, this.width * 0.8, 0, Math.PI * 2);
+            ctx.strokeStyle = '#ffff00';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+        }
     }
 }

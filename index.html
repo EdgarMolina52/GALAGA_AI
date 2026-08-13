@@ -16,10 +16,27 @@
             <div>Level: <span id="levelVal">1</span></div>
             <div>Lives: <span id="livesVal">3</span></div>
         </div>
-
+        <!-- Contenedor de Inventario de Power-Ups -->
+        <div id="powerups-container" class="powerups-container">
+            <div class="powerup-bubble" id="bubble-shield" onclick="window.usePowerUp('shield')">
+                <span class="pu-icon">🛡️</span>
+                <span class="pu-count" id="count-shield">0</span>
+            </div>
+            <div class="powerup-bubble" id="bubble-triple_shot" onclick="window.usePowerUp('triple_shot')">
+                <span class="pu-icon">🔫</span>
+                <span class="pu-count" id="count-triple_shot">0</span>
+            </div>
+            <div class="powerup-bubble" id="bubble-revive" onclick="window.usePowerUp('revive')">
+                <span class="pu-icon">❤️</span>
+                <span class="pu-count" id="count-revive">0</span>
+            </div>
+        </div>
         <!-- Pantallas (Screens) -->
         <div id="start-screen" class="screen active">
             <h1>Galaga AI</h1>
+            <div class="name-input">
+                <input type="text" id="player-name" placeholder="Tu Nombre (Ej. Alpha)" maxlength="12" />
+            </div>
             <div class="color-picker">
                 <label>Color Principal: <input type="color" id="color-primary" value="#ffffff"></label>
                 <label>Color Secundario: <input type="color" id="color-secondary" value="#ff0000"></label>
@@ -28,6 +45,24 @@
                 <button id="btn-coop">Jugar Cooperativo</button>
                 <button id="btn-comp">Jugar Competitivo</button>
             </div>
+        </div>
+        
+        <div id="revive-screen" class="screen">
+            <h1 id="revive-title">Revivir Aliado</h1>
+            <p id="revive-desc">Selecciona a un jugador caído para revivirlo:</p>
+            <div id="dead-players-list" class="buttons" style="flex-direction: column;">
+                <!-- Botones generados dinámicamente -->
+            </div>
+        </div>
+
+        <div id="level-complete-screen" class="screen">
+            <h1 style="color: #00ff00; text-shadow: 0 0 10px #00ff00;">¡Nivel Completado!</h1>
+            <p>Preparando siguiente oleada...</p>
+        </div>
+
+        <div id="dead-wait-screen" class="screen">
+            <h1 style="color: #ff0000; text-shadow: 0 0 10px #ff0000;">Nave Destruida</h1>
+            <p>Espera a que un compañero te reviva.</p>
         </div>
 
         <div id="game-over-screen" class="screen">

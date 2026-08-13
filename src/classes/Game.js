@@ -5,6 +5,7 @@ import { Particle } from './Particle.js';
 import { Background } from './Background.js';
 import { InputHandler } from '../utils/input.js';
 import { CONFIG } from '../utils/config.js';
+import { audioManager } from '../utils/audio.js';
 
 export class Game {
     constructor(canvasId) {
@@ -53,12 +54,18 @@ export class Game {
         };
         
         document.getElementById('btn-coop').addEventListener('click', () => {
+            const nameInput = document.getElementById('player-name').value.trim();
+            if (!nameInput) return; // Validación manejada en main.js
+            
             this.sendColors();
             this.socket.emit('setMode', 'coop');
             this.socket.emit('startGame');
         });
         
         document.getElementById('btn-comp').addEventListener('click', () => {
+            const nameInput = document.getElementById('player-name').value.trim();
+            if (!nameInput) return; // Validación manejada en main.js
+            
             this.sendColors();
             this.socket.emit('setMode', 'comp');
             this.socket.emit('startGame');
@@ -91,11 +98,17 @@ export class Game {
             
             for (let id in state.players) {
                 this.players[id] = new Player(this, state.players[id].x, state.players[id].y, id === this.socket.id, state.players[id].colors);
+                this.players[id].name = state.players[id].name;
+            }
+
+            if (state.isPlaying) {
+                this.changeState('PLAYING');
             }
         });
 
         this.socket.on('playerJoined', (data) => {
             this.players[data.id] = new Player(this, data.player.x, data.player.y, false, data.player.colors);
+            this.players[data.id].name = data.player.name;
         });
         
         this.socket.on('playerColorsUpdated', (data) => {
@@ -124,6 +137,20 @@ export class Game {
         this.socket.on('modeChanged', (mode) => {
             this.mode = mode;
         });
+        
+        this.socket.on('enemyKilled', (enemyId) => {
+            const enemy = this.enemies.find(e => e.id === enemyId);
+            if (enemy && !enemy.markedForDeletion) {
+                enemy.markedForDeletion = true;
+                this.createExplosion(enemy.x + enemy.width/2, enemy.y + enemy.height/2, enemy.color, 30);
+            }
+        });
+        
+        this.socket.on('gameOver', () => {
+            if (this.state !== 'GAMEOVER') {
+                this.changeState('GAMEOVER');
+            }
+        });
 
         this.socket.on('gameStarted', () => {
             this.sendColors();
@@ -132,6 +159,17 @@ export class Game {
 
         this.socket.on('levelChanged', (lvl) => {
             this.level = lvl;
+            audioManager.playLevelComplete();
+            
+            // Mostrar pantalla de nivel completado
+            const lvlScreen = document.getElementById('level-complete-screen');
+            if (lvlScreen) {
+                lvlScreen.classList.add('active');
+                setTimeout(() => {
+                    lvlScreen.classList.remove('active');
+                }, 3000);
+            }
+            
             this.startLevel();
         });
 
@@ -141,9 +179,9 @@ export class Game {
             }
         });
         
-        this.socket.on('spawnBoss', () => {
+        this.socket.on('spawnBoss', (data) => {
             if (this.state === 'PLAYING' && !this.bossActive) {
-                this.spawnBoss();
+                this.spawnBoss(data.type);
             }
         });
         
@@ -156,15 +194,77 @@ export class Game {
                 
                 if (p.lives <= 0) {
                     p.markedForDeletion = true;
-                } else {
-                    p.x = CONFIG.GAME_WIDTH / 2 - CONFIG.PLAYER_WIDTH / 2;
-                    p.y = CONFIG.GAME_HEIGHT - CONFIG.PLAYER_HEIGHT - 20;
-                }
+                    // Si el jugador local muere
+                    if (id === this.socket.id) {
+                        document.getElementById('dead-wait-screen').classList.add('active');
+                        
+                        // Soltar todos los powerups
+                        let typesToDrop = [];
+                        if (p.powerUpInventory) {
+                            for (let type in p.powerUpInventory) {
+                                let count = p.powerUpInventory[type];
+                                for (let i = 0; i < count; i++) {
+                                    typesToDrop.push(type);
+                                }
+                                p.powerUpInventory[type] = 0;
+                            }
+                        }
+                        this.updateUI();
+                        
+                        if (typesToDrop.length > 0) {
+                            this.socket.emit('dropPowerUps', { types: typesToDrop, x: p.x, y: p.y });
+                        }
+                    } else {
+                        p.x = CONFIG.GAME_WIDTH / 2 - CONFIG.PLAYER_WIDTH / 2;
+                        p.y = CONFIG.GAME_HEIGHT - CONFIG.PLAYER_HEIGHT - 20;
+                        p.invulnerableTimer = 120;
+                    }
             }
         });
 
         this.socket.on('gameOver', () => {
+            audioManager.playGameOver();
             this.changeState('GAMEOVER');
+        });
+
+        this.socket.on('spawnPowerUp', (data) => {
+            if (this.state === 'PLAYING') {
+                import('./PowerUp.js').then(module => {
+                    this.powerUps.push(new module.PowerUp(this, data.x, data.y, data.type, data.id));
+                });
+            }
+        });
+
+        this.socket.on('showReviveMenu', (byPlayerId) => {
+            this.changeState('PAUSED');
+            this.showReviveMenu(byPlayerId);
+        });
+
+        this.socket.on('resumeGame', () => {
+            if (this.state === 'PAUSED') {
+                this.changeState('PLAYING');
+                document.getElementById('revive-screen').classList.remove('active');
+            }
+        });
+
+        this.socket.on('playerRevived', (playerId) => {
+            if (this.players[playerId]) {
+                this.players[playerId].lives = 3;
+                this.players[playerId].markedForDeletion = false;
+                this.players[playerId].x = CONFIG.GAME_WIDTH / 2 - CONFIG.PLAYER_WIDTH / 2;
+                this.players[playerId].y = CONFIG.GAME_HEIGHT - CONFIG.PLAYER_HEIGHT - 20;
+                this.players[playerId].invulnerableTimer = 120;
+                
+                if (playerId === this.socket.id) {
+                    document.getElementById('dead-wait-screen').classList.remove('active');
+                }
+            }
+        });
+        
+        this.socket.on('playerPowerUp', (data) => {
+            if (this.players[data.id]) {
+                this.players[data.id].activatePowerUp(data.type);
+            }
         });
     }
 
@@ -176,6 +276,10 @@ export class Game {
         this.enemies = [];
         this.enemyProjectiles = [];
         this.playerProjectiles = [];
+        this.powerUps = [];
+        
+        document.getElementById('level-complete-screen')?.classList.remove('active');
+        document.getElementById('dead-wait-screen')?.classList.remove('active');
         
         this.enemiesToKill = 10 + (this.level * 5);
         this.enemiesKilled = 0;
@@ -187,7 +291,13 @@ export class Game {
         
         for (let id in this.players) {
             this.players[id].lives = 3;
+            this.players[id].powerUpInventory = {
+                shield: 0,
+                triple_shot: 0,
+                revive: 0
+            };
             this.players[id].x = startX + (index * 80);
+            this.players[id].invulnerableTimer = 120;
             index++;
         }
         
@@ -198,6 +308,7 @@ export class Game {
         this.playerProjectiles = [];
         this.enemyProjectiles = [];
         this.enemies = [];
+        this.powerUps = [];
         this.bossActive = false;
         
         this.enemiesToKill = 10 + (this.level * 5);
@@ -206,9 +317,69 @@ export class Game {
         this.updateUI();
     }
 
-    spawnBoss() {
+    showReviveMenu(byPlayerId) {
+        const modal = document.getElementById('revive-screen');
+        const list = document.getElementById('dead-players-list');
+        const title = document.getElementById('revive-title');
+        const desc = document.getElementById('revive-desc');
+        list.innerHTML = ''; // Limpiar lista
+        
+        if (byPlayerId === this.socket.id) {
+            if (title) {
+                title.innerText = 'Revivir Aliado';
+                title.style.color = '#00ff00';
+                title.style.textShadow = '0 0 10px #00ff00';
+            }
+            if (desc) desc.innerText = 'Selecciona a un jugador caído para revivirlo:';
+            
+            for (let id in this.players) {
+                if (this.players[id].lives <= 0) {
+                    const btn = document.createElement('button');
+                    btn.innerText = `Revivir a ${this.players[id].name || 'Jugador ' + id.substr(0,4)}`;
+                    btn.onclick = () => {
+                        this.socket.emit('revivePlayer', id);
+                    };
+                    list.appendChild(btn);
+                }
+            }
+            
+            const cancelBtn = document.createElement('button');
+            cancelBtn.innerText = 'Cancelar';
+            cancelBtn.style.backgroundColor = '#ff0000';
+            cancelBtn.onclick = () => {
+                this.socket.emit('cancelRevive');
+            };
+            list.appendChild(cancelBtn);
+        } else {
+            if (title) {
+                title.innerText = 'Refuerzos en camino...';
+                title.style.color = '#00AAFF';
+                title.style.textShadow = '0 0 10px #00AAFF';
+            }
+            if (desc) desc.innerText = 'Un compañero está decidiendo a quién revivir.';
+        }
+        
+        modal.classList.add('active');
+    }
+
+    spawnBoss(type = 'laser') {
         this.bossActive = true;
-        this.enemies.push(new Boss(this, CONFIG.GAME_WIDTH / 2 - 40, -100, this.level));
+        audioManager.playBossWarning();
+        let boss;
+        
+        import('./LaserBoss.js').then(laser => {
+            import('./SplitBoss.js').then(split => {
+                import('./SpawnerBoss.js').then(spawner => {
+                    const startX = CONFIG.GAME_WIDTH / 2 - 90; // width is 180, so -90
+                    if (type === 'laser') boss = new laser.LaserBoss(this, startX, -150, this.level);
+                    else if (type === 'split') boss = new split.SplitBoss(this, startX, -150, this.level);
+                    else if (type === 'spawner') boss = new spawner.SpawnerBoss(this, startX, -150, this.level);
+                    else boss = new laser.LaserBoss(this, startX, -150, this.level); // fallback
+                    
+                    this.enemies.push(boss);
+                });
+            });
+        });
     }
     
     enemyKilled() {
@@ -226,6 +397,23 @@ export class Game {
         const localPlayer = this.players[this.socket.id];
         if (localPlayer) {
             this.livesEl.innerText = localPlayer.lives;
+            
+            // Actualizar inventario de power-ups
+            const inv = localPlayer.powerUpInventory;
+            if (inv) {
+                const shieldCount = document.getElementById('count-shield');
+                const tripleCount = document.getElementById('count-triple_shot');
+                const reviveCount = document.getElementById('count-revive');
+                
+                if (shieldCount) shieldCount.innerText = inv.shield || 0;
+                if (tripleCount) tripleCount.innerText = inv.triple_shot || 0;
+                if (reviveCount) reviveCount.innerText = inv.revive || 0;
+                
+                // Efecto visual si no hay cargas
+                document.getElementById('bubble-shield').style.opacity = inv.shield > 0 ? 1 : 0.5;
+                document.getElementById('bubble-triple_shot').style.opacity = inv.triple_shot > 0 ? 1 : 0.5;
+                document.getElementById('bubble-revive').style.opacity = inv.revive > 0 ? 1 : 0.5;
+            }
         }
     }
 
@@ -235,6 +423,7 @@ export class Game {
     }
 
     createExplosion(x, y, color, count) {
+        audioManager.playExplosion();
         for (let i = 0; i < count; i++) {
             this.particles.push(new Particle(x, y, color));
         }
@@ -271,9 +460,27 @@ export class Game {
                 this.playerHit(localPlayer);
             }
         }
+        
+        if (this.powerUps) {
+            for (let i = this.powerUps.length - 1; i >= 0; i--) {
+                let pu = this.powerUps[i];
+                if (pu.collidesWith(localPlayer)) {
+                    audioManager.playPowerUpPickup();
+                    pu.markedForDeletion = true;
+                    localPlayer.holdPowerUp(pu.type);
+                    this.updateUI();
+                    
+                    if (this.socket) {
+                        this.socket.emit('powerUpCollected', pu.id);
+                    }
+                }
+            }
+        }
     }
     
     playerHit(player) {
+        if (player.shieldActive || player.invulnerableTimer > 0) return; // Inmune con escudo o al reaparecer
+
         // Solo enviamos el evento si el que choca es nuestro jugador local
         // El servidor lo validará y nos devolverá un evento 'playerHit' para actualizar la UI
         if (player === this.players[this.socket.id]) {
@@ -302,11 +509,13 @@ export class Game {
         this.enemyProjectiles.forEach(p => p.update());
         this.enemies.forEach(e => e.update());
         this.particles.forEach(p => p.update());
+        if (this.powerUps) this.powerUps.forEach(p => p.update());
         
         this.playerProjectiles = this.playerProjectiles.filter(p => !p.markedForDeletion);
         this.enemyProjectiles = this.enemyProjectiles.filter(p => !p.markedForDeletion);
         this.enemies = this.enemies.filter(e => !e.markedForDeletion);
         this.particles = this.particles.filter(p => !p.markedForDeletion);
+        if (this.powerUps) this.powerUps = this.powerUps.filter(p => !p.markedForDeletion);
         
         this.checkCollisions();
     }
@@ -316,6 +525,8 @@ export class Game {
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
         this.background.draw(this.ctx);
+        
+        if (this.powerUps) this.powerUps.forEach(p => p.draw(this.ctx));
         
         if (this.state !== 'PLAYING') return;
 
