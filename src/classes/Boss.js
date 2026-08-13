@@ -23,9 +23,9 @@ export class Boss extends Enemy {
         this.image = new Image();
     }
 
-    takeDamage(amount) {
+    takeDamage(amount, isLocal = true) {
         if (this.phase === 'enter') return; // Inmune mientras entra
-        super.takeDamage(amount);
+        super.takeDamage(amount, isLocal);
     }
 
     update() {

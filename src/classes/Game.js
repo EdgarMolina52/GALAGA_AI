@@ -146,10 +146,37 @@ export class Game {
             }
         });
         
+        this.socket.on('bossKilled', () => {
+            this.enemies.forEach(e => {
+                if (e.type === 'boss' && !e.markedForDeletion) {
+                    e.markedForDeletion = true;
+                    this.createExplosion(e.x + e.width/2, e.y + e.height/2, e.color, 50);
+                }
+            });
+            this.bossActive = false;
+        });
+        
         this.socket.on('gameOver', () => {
             if (this.state !== 'GAMEOVER') {
                 this.changeState('GAMEOVER');
+                const localPlayer = this.players[this.socket.id];
+                this.socket.emit('submitScore', { name: localPlayer ? localPlayer.name : 'Unknown', score: this.score });
             }
+        });
+        
+        this.socket.on('showScoreboard', (scores) => {
+            const container = document.getElementById('scoreboard-container');
+            container.innerHTML = '';
+            scores.forEach((s, index) => {
+                const p = document.createElement('p');
+                if (index === 0) {
+                    p.innerHTML = `👑 <strong>Jefe Maestro:</strong> ${s.name} - ${s.score}`;
+                    p.style.color = '#FFD700';
+                } else {
+                    p.innerHTML = `${s.name} - ${s.score}`;
+                }
+                container.appendChild(p);
+            });
         });
 
         this.socket.on('gameStarted', () => {
@@ -219,12 +246,15 @@ export class Game {
                         p.y = CONFIG.GAME_HEIGHT - CONFIG.PLAYER_HEIGHT - 20;
                         p.invulnerableTimer = 120;
                     }
+                }
             }
         });
 
         this.socket.on('gameOver', () => {
             audioManager.playGameOver();
             this.changeState('GAMEOVER');
+            const localPlayer = this.players[this.socket.id];
+            this.socket.emit('submitScore', { name: localPlayer ? localPlayer.name : 'Unknown', score: this.score });
         });
 
         this.socket.on('spawnPowerUp', (data) => {
@@ -232,6 +262,13 @@ export class Game {
                 import('./PowerUp.js').then(module => {
                     this.powerUps.push(new module.PowerUp(this, data.x, data.y, data.type, data.id));
                 });
+            }
+        });
+
+        this.socket.on('powerUpCollected', (puId) => {
+            const pu = this.powerUps.find(p => p.id === puId);
+            if (pu && !pu.markedForDeletion) {
+                pu.markedForDeletion = true;
             }
         });
 
@@ -436,7 +473,11 @@ export class Game {
                 let e = this.enemies[j];
                 if (p.collidesWith(e)) {
                     p.markedForDeletion = true;
-                    e.takeDamage(1);
+                    if (p.isLocal !== false) {
+                        e.takeDamage(1, true);
+                    } else {
+                        e.takeDamage(1, false);
+                    }
                     break;
                 }
             }
@@ -493,17 +534,22 @@ export class Game {
         
         if (this.state !== 'PLAYING') return;
 
-        const localPlayer = this.players[this.socket.id];
-        if (localPlayer) {
-            const oldX = localPlayer.x;
-            const oldY = localPlayer.y;
-            
-            localPlayer.update(this.input);
-            
-            if (oldX !== localPlayer.x || oldY !== localPlayer.y) {
-                this.socket.emit('playerMove', { x: localPlayer.x, y: localPlayer.y });
+        for (let id in this.players) {
+            const player = this.players[id];
+            if (id === this.socket.id) {
+                const oldX = player.x;
+                const oldY = player.y;
+                
+                player.update(this.input);
+                
+                if (oldX !== player.x || oldY !== player.y) {
+                    this.socket.emit('playerMove', { x: player.x, y: player.y });
+                }
+            } else {
+                player.update({});
             }
         }
+        
         
         this.playerProjectiles.forEach(p => p.update());
         this.enemyProjectiles.forEach(p => p.update());
@@ -545,11 +591,12 @@ export class Game {
     changeState(newState) {
         this.state = newState;
         Object.values(this.screens).forEach(screen => screen.classList.remove('active'));
+        document.getElementById('dead-wait-screen').classList.remove('active');
+        document.getElementById('revive-screen').classList.remove('active');
         
         if (newState === 'START') {
             this.screens.start.classList.add('active');
         } else if (newState === 'GAMEOVER') {
-            document.getElementById('finalScoreVal').innerText = this.score;
             this.screens.gameOver.classList.add('active');
         } else if (newState === 'VICTORY') {
             document.getElementById('victoryScoreVal').innerText = this.score;

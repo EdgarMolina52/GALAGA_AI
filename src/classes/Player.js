@@ -116,7 +116,7 @@ export class Player extends Entity {
         if (this.x < 0) this.x = 0;
         if (this.x + this.width > CONFIG.GAME_WIDTH) this.x = CONFIG.GAME_WIDTH - this.width;
         
-        const minY = CONFIG.GAME_HEIGHT * 0.6;
+        const minY = CONFIG.GAME_HEIGHT * 0.3; // Permite volar mucho más alto (hasta el 30% superior)
         if (this.y < minY) this.y = minY;
         if (this.y + this.height > CONFIG.GAME_HEIGHT) this.y = CONFIG.GAME_HEIGHT - this.height;
 
@@ -133,21 +133,23 @@ export class Player extends Entity {
         const xPos = this.x + this.width / 2 - CONFIG.PROJECTILE_WIDTH / 2;
         
         if (this.tripleShotActive) {
-            this.game.playerProjectiles.push(new Projectile(xPos, this.y));
+            let p1 = new Projectile(xPos, this.y); p1.isLocal = true;
+            this.game.playerProjectiles.push(p1);
             
             const leftProj = new Projectile(this.x, this.y);
-            leftProj.speedX = -1;
+            leftProj.speedX = -1; leftProj.isLocal = true;
             this.game.playerProjectiles.push(leftProj);
             
             const rightProj = new Projectile(this.x + this.width, this.y);
-            rightProj.speedX = 1;
+            rightProj.speedX = 1; rightProj.isLocal = true;
             this.game.playerProjectiles.push(rightProj);
             
             if (this.game.socket) {
                 this.game.socket.emit('playerShoot', { x: xPos, y: this.y, triple: true });
             }
         } else {
-            this.game.playerProjectiles.push(new Projectile(xPos, this.y));
+            let p = new Projectile(xPos, this.y); p.isLocal = true;
+            this.game.playerProjectiles.push(p);
             
             // Emitir al servidor
             if (this.game.socket) {
@@ -158,16 +160,19 @@ export class Player extends Entity {
     
     remoteShoot(x, y, triple = false) {
         if (triple) {
-            this.game.playerProjectiles.push(new Projectile(x, y));
+            let p1 = new Projectile(x, y); p1.isLocal = false;
+            this.game.playerProjectiles.push(p1);
+            
             const leftProj = new Projectile(x - this.width/2, y);
-            leftProj.speedX = -1;
+            leftProj.speedX = -1; leftProj.isLocal = false;
             this.game.playerProjectiles.push(leftProj);
             
             const rightProj = new Projectile(x + this.width/2, y);
-            rightProj.speedX = 1;
+            rightProj.speedX = 1; rightProj.isLocal = false;
             this.game.playerProjectiles.push(rightProj);
         } else {
-            this.game.playerProjectiles.push(new Projectile(x, y));
+            let p = new Projectile(x, y); p.isLocal = false;
+            this.game.playerProjectiles.push(p);
         }
     }
 

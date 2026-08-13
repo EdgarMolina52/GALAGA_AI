@@ -17,16 +17,20 @@ const gameState = {
     enemiesSpawned: 0,
     enemiesToSpawn: 20,
     killedEnemiesSet: new Set(),
-    bossSpawned: false
+    bossSpawned: false,
+    finalScores: []
 };
 
 let spawnInterval = null;
 
-function startSpawning() {
+function startSpawning(reset = true) {
     if (spawnInterval) clearInterval(spawnInterval);
-    gameState.enemiesSpawned = 0;
-    gameState.killedEnemiesSet.clear();
-    gameState.bossSpawned = false;
+    
+    if (reset) {
+        gameState.enemiesSpawned = 0;
+        gameState.killedEnemiesSet.clear();
+        gameState.bossSpawned = false;
+    }
     
     // Spawn cada 1.5 a 3 segundos dependiendo del nivel
     const spawnRate = Math.max(1000, 3000 - (gameState.level * 200));
@@ -100,6 +104,7 @@ io.on('connection', (socket) => {
             if (allDead && gameState.isPlaying) {
                 gameState.isPlaying = false;
                 if (spawnInterval) clearInterval(spawnInterval);
+                gameState.finalScores = [];
                 io.emit('gameOver');
             }
         }
@@ -151,6 +156,7 @@ io.on('connection', (socket) => {
 
     socket.on('bossKilled', (data) => {
         if (gameState.isPlaying && gameState.bossSpawned) {
+            socket.broadcast.emit('bossKilled');
             // Boss always drops a revive power up
             if (data && data.x !== undefined) {
                 io.emit('spawnPowerUp', { id: Math.random().toString(36).substr(2, 9), type: 'revive', x: data.x, y: data.y });
@@ -161,7 +167,7 @@ io.on('connection', (socket) => {
             // Damos un respiro antes de empezar el siguiente nivel
             setTimeout(() => {
                 io.emit('levelChanged', gameState.level);
-                startSpawning();
+                startSpawning(true);
             }, 3000);
             gameState.bossSpawned = false; // Reset temporary to prevent double trigger
         }
@@ -182,7 +188,7 @@ io.on('connection', (socket) => {
             }
             
             io.emit('gameStarted');
-            startSpawning();
+            startSpawning(true);
         }
     });
     
@@ -203,19 +209,28 @@ io.on('connection', (socket) => {
             io.emit('playerRevived', playerIdToRevive);
         }
         io.emit('resumeGame');
-        if (gameState.isPlaying) startSpawning();
+        if (gameState.isPlaying) startSpawning(false);
     });
 
     socket.on('cancelRevive', () => {
         io.emit('resumeGame');
-        if (gameState.isPlaying) startSpawning();
+        if (gameState.isPlaying) startSpawning(false);
     });
 
     socket.on('nextLevel', () => {
         gameState.level++;
         updateEnemiesToSpawn();
-        startSpawning();
+        startSpawning(true);
         io.emit('levelChanged', gameState.level);
+    });
+
+    socket.on('submitScore', (data) => {
+        gameState.finalScores.push(data);
+        const playerCount = Object.keys(gameState.players).length;
+        if (gameState.finalScores.length === playerCount) {
+            gameState.finalScores.sort((a, b) => b.score - a.score);
+            io.emit('showScoreboard', gameState.finalScores);
+        }
     });
 
     socket.on('gameOver', () => {

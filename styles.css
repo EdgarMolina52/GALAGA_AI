@@ -26,6 +26,7 @@ canvas {
     background-color: #000;
     width: 100vw;
     height: 100vh;
+    object-fit: contain; /* Mantiene la proporción original (no se estira) */
 }
 
 /* UI / HUD Styles */

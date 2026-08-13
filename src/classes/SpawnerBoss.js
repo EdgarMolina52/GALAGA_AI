@@ -23,5 +23,6 @@ export class SpawnerBoss extends Boss {
         }, 500);
         
         this.game.enemies.push(minion);
+        this.shootTimer = 100 - (this.levelMultiplier * 5);
     }
 }

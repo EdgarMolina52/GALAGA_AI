@@ -40,6 +40,8 @@ export class Enemy extends Entity {
             this.scoreValue = 300 * levelMultiplier;
             this.shootTimer = 40; // Dispara más rápido
         }
+        
+        this.maxHp = this.hp;
     }
 
     update() {
@@ -120,31 +122,44 @@ export class Enemy extends Entity {
         this.game.enemyProjectiles.push(new Projectile(xPos, this.y + this.height, true, pSpeedX, pSpeedY));
     }
     
-    takeDamage(amount) {
+    takeDamage(amount, isLocal = true) {
+        if (!isLocal && this.hp - amount <= 0) {
+            // Evitamos que una bala remota dé el golpe de gracia por culpa del lag.
+            // Siempre debe confirmarlo el jugador dueño de la bala a través del servidor.
+            this.hp = 1; 
+            return;
+        }
+
         this.hp -= amount;
         if (this.hp <= 0 && !this.markedForDeletion) {
             this.markedForDeletion = true;
-            this.game.addScore(this.scoreValue);
-            this.game.createExplosion(this.x + this.width/2, this.y + this.height/2, this.color, 15);
-            
-            if (this.constructor.name === 'Boss') {
-                if (this.game.socket) this.game.socket.emit('bossKilled', { x: this.x, y: this.y });
-            } else {
-                if (this.game.socket) this.game.socket.emit('enemyKilled', { id: this.id, x: this.x, y: this.y });
+            if (isLocal) {
+                this.game.addScore(this.scoreValue);
+                if (this.type === 'boss') {
+                    if (this.game.socket) this.game.socket.emit('bossKilled', { x: this.x, y: this.y });
+                } else {
+                    if (this.game.socket) this.game.socket.emit('enemyKilled', { id: this.id, x: this.x, y: this.y });
+                }
             }
+            this.game.createExplosion(this.x + this.width/2, this.y + this.height/2, this.color, 15);
         }
     }
 
     draw(ctx) {
         if (this.image.complete && this.image.naturalHeight !== 0) {
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = this.color;
             ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
-            ctx.shadowBlur = 0;
         } else {
             // Fallback while loading
             ctx.fillStyle = this.color;
             ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
+        
+        // Barra de vida para tanques
+        if (this.type === 'tank' && this.hp < this.maxHp) {
+            ctx.fillStyle = 'red';
+            ctx.fillRect(this.x, this.y - 6, this.width, 4);
+            ctx.fillStyle = '#0f0';
+            ctx.fillRect(this.x, this.y - 6, this.width * (this.hp / this.maxHp), 4);
         }
     }
 }

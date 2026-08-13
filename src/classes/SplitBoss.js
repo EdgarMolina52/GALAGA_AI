@@ -73,5 +73,6 @@ export class SplitBoss extends Boss {
         const rightProj = new Projectile(centerX + 20, bottomY, true);
         rightProj.speedX = 1;
         this.game.enemyProjectiles.push(rightProj);
+        this.shootTimer = 60 - (this.levelMultiplier * 5);
     }
 }

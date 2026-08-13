@@ -2,6 +2,7 @@ class AudioManager {
     constructor() {
         this.ctx = null;
         this.enabled = true; // Global toggle
+        this.noiseBuffer = null;
     }
 
     init() {
@@ -70,18 +71,20 @@ class AudioManager {
 
     playExplosion() {
         if (!this.ctx || !this.enabled) return;
-        // White noise generation
-        const duration = 0.3;
-        const bufferSize = this.ctx.sampleRate * duration; 
-        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
-        const data = buffer.getChannelData(0);
         
-        for (let i = 0; i < bufferSize; i++) {
-            data[i] = Math.random() * 2 - 1;
+        const duration = 0.3;
+        
+        if (!this.noiseBuffer) {
+            const bufferSize = this.ctx.sampleRate * 2.0; 
+            this.noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+            const data = this.noiseBuffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = Math.random() * 2 - 1;
+            }
         }
         
         const noise = this.ctx.createBufferSource();
-        noise.buffer = buffer;
+        noise.buffer = this.noiseBuffer;
         
         // Use a filter to make it sound like an explosion
         const filter = this.ctx.createBiquadFilter();
