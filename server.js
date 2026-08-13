@@ -147,6 +147,8 @@ io.on('connection', (socket) => {
                 if (spawnInterval) clearInterval(spawnInterval);
                 gameState.finalScores = [];
                 io.emit('gameOver');
+            } else {
+                checkBossSpawn();
             }
         }
     });
@@ -167,6 +169,23 @@ io.on('connection', (socket) => {
         }
     });
 
+    function checkBossSpawn() {
+        if (!gameState.isPlaying || gameState.bossSpawned) return;
+        
+        const escapedCount = Object.keys(gameState.escapedEnemyVotes).filter(id => gameState.escapedEnemyVotes[id].has('processed')).length;
+        const totalResolved = gameState.killedEnemiesSet.size + escapedCount;
+        
+        if (totalResolved >= gameState.enemiesToSpawn) {
+            gameState.bossSpawned = true;
+            if (spawnInterval) clearInterval(spawnInterval);
+            
+            const bossTypes = ['laser', 'split', 'spawner'];
+            const bossType = bossTypes[Math.floor(Math.random() * bossTypes.length)];
+            
+            io.emit('spawnBoss', { type: bossType });
+        }
+    }
+
     socket.on('enemyKilled', (data) => {
         const enemyId = data.id;
         if (gameState.isPlaying && !gameState.killedEnemiesSet.has(enemyId)) {
@@ -182,16 +201,8 @@ io.on('connection', (socket) => {
                 io.emit('spawnPowerUp', { id: Math.random().toString(36).substr(2, 9), type: puType, x: data.x, y: data.y });
             }
 
-            // Si ya mataron a todos, spawn boss
-            if (gameState.killedEnemiesSet.size >= gameState.enemiesToSpawn && !gameState.bossSpawned) {
-                gameState.bossSpawned = true;
-                if (spawnInterval) clearInterval(spawnInterval);
-                
-                const bossTypes = ['laser', 'split', 'spawner'];
-                const bossType = bossTypes[Math.floor(Math.random() * bossTypes.length)];
-                
-                io.emit('spawnBoss', { type: bossType });
-            }
+            // Si ya resolvieron a todos (muertos o fugados), spawn boss
+            checkBossSpawn();
         }
     });
 
