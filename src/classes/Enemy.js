@@ -73,10 +73,12 @@ export class Enemy extends Entity {
             }
         }
 
-        // Si el enemigo sale de la pantalla, simplemente desaparece sin causar Game Over
+        // Si el enemigo sale de la pantalla, penaliza a todo el equipo
         if (this.y + this.height > CONFIG.GAME_HEIGHT) {
             this.markedForDeletion = true;
-            // Quitamos el Game Over automático para evitar problemas de desincronización
+            if (this.game.socket) {
+                this.game.socket.emit('enemyEscaped', this.id);
+            }
         }
     }
     

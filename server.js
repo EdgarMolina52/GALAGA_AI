@@ -17,6 +17,7 @@ const gameState = {
     enemiesSpawned: 0,
     enemiesToSpawn: 20,
     killedEnemiesSet: new Set(),
+    escapedEnemyVotes: {},
     bossSpawned: false,
     finalScores: []
 };
@@ -110,6 +111,46 @@ io.on('connection', (socket) => {
         }
     });
 
+    socket.on('enemyEscaped', (enemyId) => {
+        // Ignoramos si alguien ya reportó que lo mató (el lag a veces hace creer que escapó)
+        if (gameState.killedEnemiesSet.has(enemyId)) return;
+
+        if (!gameState.escapedEnemyVotes[enemyId]) {
+            gameState.escapedEnemyVotes[enemyId] = new Set();
+        }
+        
+        // Evitamos doble castigo si ya fue procesado
+        if (gameState.escapedEnemyVotes[enemyId].has('processed')) return;
+
+        gameState.escapedEnemyVotes[enemyId].add(socket.id);
+        
+        const playerCount = Math.max(1, Object.keys(gameState.players).length);
+        
+        // Solo castigamos si TODOS los jugadores están de acuerdo en que el enemigo escapó
+        if (gameState.escapedEnemyVotes[enemyId].size >= playerCount) {
+            gameState.escapedEnemyVotes[enemyId].add('processed');
+            
+            // Deduct 1 life from all players
+            let allDead = true;
+            for (let id in gameState.players) {
+                if (gameState.players[id].lives > 0) {
+                    gameState.players[id].lives--;
+                    io.emit('playerHit', id);
+                    if (gameState.players[id].lives > 0) {
+                        allDead = false;
+                    }
+                }
+            }
+            
+            if (allDead && gameState.isPlaying) {
+                gameState.isPlaying = false;
+                if (spawnInterval) clearInterval(spawnInterval);
+                gameState.finalScores = [];
+                io.emit('gameOver');
+            }
+        }
+    });
+
     socket.on('setMode', (mode) => {
         gameState.mode = mode;
         io.emit('modeChanged', mode);
@@ -180,6 +221,7 @@ io.on('connection', (socket) => {
             gameState.score = 0;
             updateEnemiesToSpawn();
             gameState.killedEnemiesSet.clear();
+            gameState.escapedEnemyVotes = {};
             gameState.bossSpawned = false;
             
             // Reset lives for all connected players
