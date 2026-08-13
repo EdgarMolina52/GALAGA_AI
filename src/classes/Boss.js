@@ -11,7 +11,7 @@ export class Boss extends Enemy {
         this.height = 120;
         
         const playerCount = Math.max(1, Object.keys(this.game.players).length);
-        this.hp = 8 * level * playerCount;
+        this.hp = 40 * level * playerCount;
         this.maxHp = this.hp;
         this.scoreValue = 1000 * level;
         
