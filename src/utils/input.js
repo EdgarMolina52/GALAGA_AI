@@ -50,10 +50,31 @@ export class InputHandler {
 
         const updateTouch = (e) => {
             const rect = canvas.getBoundingClientRect();
-            const scaleX = canvas.width / rect.width;
-            const scaleY = canvas.height / rect.height;
-            this.touchX = (e.touches[0].clientX - rect.left) * scaleX;
-            this.touchY = (e.touches[0].clientY - rect.top) * scaleY;
+            
+            // Calculamos el tamaño real del canvas renderizado debido al object-fit: contain
+            const canvasRatio = canvas.width / canvas.height;
+            const rectRatio = rect.width / rect.height;
+            
+            let renderedWidth = rect.width;
+            let renderedHeight = rect.height;
+            let offsetX = 0;
+            let offsetY = 0;
+            
+            if (rectRatio > canvasRatio) {
+                // Barras a los lados (Pillarbox)
+                renderedWidth = rect.height * canvasRatio;
+                offsetX = (rect.width - renderedWidth) / 2;
+            } else {
+                // Barras arriba/abajo (Letterbox)
+                renderedHeight = rect.width / canvasRatio;
+                offsetY = (rect.height - renderedHeight) / 2;
+            }
+            
+            const scaleX = canvas.width / renderedWidth;
+            const scaleY = canvas.height / renderedHeight;
+            
+            this.touchX = (e.touches[0].clientX - rect.left - offsetX) * scaleX;
+            this.touchY = (e.touches[0].clientY - rect.top - offsetY) * scaleY;
         };
 
         canvas.addEventListener('touchstart', (e) => {
