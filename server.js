@@ -30,6 +30,7 @@ function startSpawning(reset = true) {
     if (reset) {
         gameState.enemiesSpawned = 0;
         gameState.killedEnemiesSet.clear();
+        gameState.escapedEnemyVotes = {};
         gameState.bossSpawned = false;
     }
     
@@ -208,7 +209,7 @@ io.on('connection', (socket) => {
 
     socket.on('bossKilled', (data) => {
         if (gameState.isPlaying && gameState.bossSpawned) {
-            socket.broadcast.emit('bossKilled');
+            io.emit('bossKilled');
             // Boss always drops a revive power up
             if (data && data.x !== undefined) {
                 io.emit('spawnPowerUp', { id: Math.random().toString(36).substr(2, 9), type: 'revive', x: data.x, y: data.y });
