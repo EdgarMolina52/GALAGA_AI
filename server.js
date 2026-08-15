@@ -118,39 +118,34 @@ io.on('connection', (socket) => {
 
         if (!gameState.escapedEnemyVotes[enemyId]) {
             gameState.escapedEnemyVotes[enemyId] = new Set();
-        }
-        
-        // Evitamos doble castigo si ya fue procesado
-        if (gameState.escapedEnemyVotes[enemyId].has('processed')) return;
-
-        gameState.escapedEnemyVotes[enemyId].add(socket.id);
-        
-        const playerCount = Math.max(1, Object.keys(gameState.players).length);
-        
-        // Solo castigamos si TODOS los jugadores están de acuerdo en que el enemigo escapó
-        if (gameState.escapedEnemyVotes[enemyId].size >= playerCount) {
-            gameState.escapedEnemyVotes[enemyId].add('processed');
             
-            // Deduct 1 life from all players
-            let allDead = true;
-            for (let id in gameState.players) {
-                if (gameState.players[id].lives > 0) {
-                    gameState.players[id].lives--;
-                    io.emit('playerHit', id);
-                    if (gameState.players[id].lives > 0) {
-                        allDead = false;
+            // Damos 1.5 segundos de gracia por el lag. Si nadie lo mata en ese tiempo, se procesa la fuga.
+            setTimeout(() => {
+                if (gameState.isPlaying && !gameState.killedEnemiesSet.has(enemyId) && gameState.escapedEnemyVotes[enemyId] && !gameState.escapedEnemyVotes[enemyId].has('processed')) {
+                    gameState.escapedEnemyVotes[enemyId].add('processed');
+                    
+                    // Deduct 1 life from all players
+                    let allDead = true;
+                    for (let id in gameState.players) {
+                        if (gameState.players[id].lives > 0) {
+                            gameState.players[id].lives--;
+                            io.emit('playerHit', id);
+                            if (gameState.players[id].lives > 0) {
+                                allDead = false;
+                            }
+                        }
+                    }
+                    
+                    if (allDead && gameState.isPlaying) {
+                        gameState.isPlaying = false;
+                        if (spawnInterval) clearInterval(spawnInterval);
+                        gameState.finalScores = [];
+                        io.emit('gameOver');
+                    } else {
+                        checkBossSpawn();
                     }
                 }
-            }
-            
-            if (allDead && gameState.isPlaying) {
-                gameState.isPlaying = false;
-                if (spawnInterval) clearInterval(spawnInterval);
-                gameState.finalScores = [];
-                io.emit('gameOver');
-            } else {
-                checkBossSpawn();
-            }
+            }, 1500);
         }
     });
 
