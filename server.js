@@ -239,11 +239,11 @@ io.on('connection', (socket) => {
             io.emit('gameStarted');
             startSpawning(true);
         } else {
-            // El juego ya empezó, así que solo le enviamos la señal a este jugador para que se una.
-            socket.emit('gameStarted');
+            // Late joiner logic
             if (gameState.players[socket.id]) {
                 gameState.players[socket.id].lives = 3;
             }
+            socket.emit('gameStarted');
         }
     });
     

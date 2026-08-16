@@ -39,6 +39,11 @@ class AudioManager {
         osc.stop(this.ctx.currentTime + duration);
     }
 
+    playBackgroundMusic() {
+        if (!this.ctx || !this.enabled) return;
+        // Placeholder para música de fondo
+    }
+
     playShoot() {
         this.playOscillator({
             type: 'square',
